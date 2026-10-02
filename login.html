@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>로그인 — 모아보드</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%235b3df5'/><rect x='7' y='7' width='13' height='13' rx='3' fill='white'/><rect x='12' y='12' width='13' height='13' rx='3' fill='%23c6f432'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar-wrap">
+    <div class="wrap topbar">
+      <a class="logo" href="index.html"><span class="logo-mark" aria-hidden="true"></span>모아보드</a>
+      <a class="btn btn-sm" href="index.html">처음으로</a>
+    </div>
+  </header>
+
+  <main class="wrap center-stage">
+    <form id="auth-form" class="panel auth" novalidate>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-mode="login" aria-selected="true">로그인</button>
+        <button type="button" role="tab" data-mode="signup" aria-selected="false">회원가입</button>
+      </div>
+      <h1 id="heading">다시 오셨네요</h1>
+      <p id="sub" class="sub">로그인하면 내 보드를 만들고 관리할 수 있습니다.</p>
+
+      <label class="field"><span>이메일</span>
+        <input class="input" type="email" name="email" autocomplete="email" placeholder="name@example.com" required>
+      </label>
+      <label class="field"><span>비밀번호 <span class="hint">· 6자 이상</span></span>
+        <input class="input" type="password" name="password" autocomplete="current-password" minlength="6" required>
+      </label>
+      <button id="submit-btn" class="btn btn-primary btn-block">로그인</button>
+      <p id="msg" class="msg" hidden></p>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const form = document.getElementById("auth-form");
+    const submit = document.getElementById("submit-btn");
+    const msg = document.getElementById("msg");
+    let mode = "login";
+
+    const TEXT = {
+      login: { heading: "다시 오셨네요", sub: "로그인하면 내 보드를 만들고 관리할 수 있습니다.", button: "로그인" },
+      signup: { heading: "처음 오셨나요", sub: "이메일로 가입하고 첫 보드를 만들어 보세요.", button: "가입하기" },
+    };
+
+    // Supabase가 돌려주는 영어 오류를 한국어로 바꾼다
+    function friendlyError(message) {
+      if (/invalid login credentials/i.test(message)) return "이메일 또는 비밀번호가 맞지 않습니다.";
+      if (/email not confirmed/i.test(message)) return "메일 인증이 아직 끝나지 않았습니다. 메일함의 확인 링크를 먼저 누르세요.";
+      if (/already registered/i.test(message)) return "이미 가입된 이메일입니다. 로그인 탭에서 들어오세요.";
+      if (/password/i.test(message)) return "비밀번호를 6자 이상으로 정해 주세요.";
+      if (/rate limit/i.test(message)) return "요청이 너무 많습니다. 잠시 뒤 다시 시도하세요.";
+      return message;
+    }
+
+    function showMsg(text, kind) {
+      msg.textContent = text;
+      msg.className = "msg " + kind;
+      msg.hidden = false;
+    }
+
+    function setMode(next) {
+      mode = next;
+      document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.mode === mode));
+      document.getElementById("heading").textContent = TEXT[mode].heading;
+      document.getElementById("sub").textContent = TEXT[mode].sub;
+      submit.textContent = TEXT[mode].button;
+      form.password.autocomplete = mode === "signup" ? "new-password" : "current-password";
+      msg.hidden = true;
+    }
+    document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!db) return showMsg("Supabase를 연결해야 로그인할 수 있습니다. config.js를 채우세요.", "error");
+      if (!form.reportValidity()) return;
+
+      const email = form.email.value.trim();
+      const password = form.password.value;
+      submit.disabled = true;
+
+      const { data, error } = mode === "signup"
+        ? await db.auth.signUp({ email, password, options: { emailRedirectTo: new URL("dashboard.html", location.href).href } })
+        : await db.auth.signInWithPassword({ email, password });
+
+      submit.disabled = false;
+      if (error) return showMsg(friendlyError(error.message), "error");
+
+      // 메일 인증이 켜져 있으면 가입 직후에는 세션이 없다
+      if (!data.session) {
+        return showMsg(email + " 으로 확인 메일을 보냈습니다. 메일의 링크를 누른 뒤 로그인하세요.", "ok");
+      }
+      location.href = "dashboard.html";
+    });
+
+    // 이미 로그인한 사람은 바로 대시보드로
+    currentUser().then(user => { if (user) location.replace("dashboard.html"); });
+    if (!db) submit.disabled = true;
+  </script>
+</body>
+</html>

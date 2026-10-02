@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>보드 — 모아보드</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%235b3df5'/><rect x='7' y='7' width='13' height='13' rx='3' fill='white'/><rect x='12' y='12' width='13' height='13' rx='3' fill='%23c6f432'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar-wrap">
+    <div class="wrap topbar">
+      <a class="logo" href="index.html"><span class="logo-mark" aria-hidden="true"></span>모아보드</a>
+      <button id="share" class="btn btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
+        링크 복사
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="board-head">
+      <div class="eyebrow">함께 붙이는 카드 보드</div>
+      <h1 id="board-title">불러오는 중…</h1>
+      <p id="board-desc" class="board-desc"></p>
+      <div class="board-stats">
+        <span class="chip"><span id="live-dot" class="live-dot"></span><span id="live-text">연결 중</span></span>
+        <span class="chip"><span>카드 <b id="count">0</b>장</span></span>
+        <span id="owner-badge" class="chip chip-accent" hidden>내 보드</span>
+      </div>
+    </section>
+    <section id="grid" class="grid" aria-live="polite"></section>
+    <div id="empty" class="empty" hidden>
+      <svg viewBox="0 0 120 96" aria-hidden="true"><rect x="12" y="20" width="60" height="64" rx="12" fill="#d6e6ff" transform="rotate(-8 42 52)"/><g transform="rotate(6 76 44)"><rect x="46" y="12" width="60" height="64" rx="12" fill="#fff0b3" stroke="rgba(20,20,40,.1)"/><circle cx="62" cy="30" r="6" fill="#f2c230"/><rect x="58" y="44" width="36" height="6" rx="3" fill="rgba(20,20,40,.16)"/><rect x="58" y="56" width="24" height="6" rx="3" fill="rgba(20,20,40,.1)"/></g></svg>
+      <strong>아직 카드가 없습니다</strong>
+      <span>카드 붙이기 버튼으로 첫 카드를 붙여 보세요.</span>
+    </div>
+  </main>
+
+  <button id="open-form" class="btn btn-primary fab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    카드 붙이기
+  </button>
+
+  <dialog id="form-dialog" class="sheet">
+    <div class="grabber" aria-hidden="true"></div>
+    <form id="card-form" class="sheet-body">
+      <div class="sheet-head">
+        <h2>카드 붙이기</h2>
+        <button type="button" class="icon-btn" data-close aria-label="닫기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <label class="field"><span>이름</span>
+        <input class="input" name="name" maxlength="20" required autocomplete="nickname" placeholder="보드에 보일 이름">
+      </label>
+      <label class="field"><span>내용</span>
+        <textarea class="input" name="content" maxlength="1000" required placeholder="하고 싶은 말을 적어 주세요"></textarea>
+        <small id="counter" class="counter">0 / 1000</small>
+      </label>
+      <div class="field"><span>사진 <span class="hint">· 선택</span></span>
+        <label class="photo-pick">
+          <span id="photo-icon" class="photo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></span>
+          <img id="photo-preview" alt="" hidden>
+          <span id="photo-label">사진 고르기</span>
+          <input id="photo" name="photo" type="file" accept="image/*" class="sr-only">
+        </label>
+      </div>
+      <fieldset class="field"><legend>카드 색</legend>
+        <div id="swatches" class="swatches"></div>
+      </fieldset>
+      <button id="submit-btn" class="btn btn-primary btn-block">붙이기</button>
+    </form>
+  </dialog>
+
+  <dialog id="viewer" class="viewer"></dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const boardId = (new URLSearchParams(location.search).get("id") || "").toLowerCase();
+    const grid = document.getElementById("grid");
+    const form = document.getElementById("card-form");
+    const formDialog = document.getElementById("form-dialog");
+    const viewer = document.getElementById("viewer");
+    const photo = document.getElementById("photo");
+    const submitBtn = document.getElementById("submit-btn");
+    let isOwner = false;
+    let columns = [];        // 세로 줄(.grid-col) 목록
+    const cardNodes = [];    // 화면에 있는 카드, 최신이 앞
+
+    // 아이콘 (고정된 문자열이라 innerHTML로 넣어도 안전하다)
+    const ICON = {
+      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
+      close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    };
+
+    // Supabase를 연결하기 전에 보여 줄 견본 카드
+    const minutesAgo = m => new Date(Date.now() - m * 60e3).toISOString();
+    const SAMPLE_CARDS = [
+      { id: "s1", author_name: "강사", color: "butter", content: "config.js 두 줄을 채우면 이 보드가 진짜로 움직입니다.", created_at: minutesAgo(0) },
+      { id: "s2", author_name: "지민", color: "sky", content: "폰으로 링크를 열고 카드를 붙이면\n모두의 화면에 바로 나타나요.", created_at: minutesAgo(1) },
+      { id: "s3", author_name: "도윤", color: "mint", content: "카드를 누르면 크게 볼 수 있습니다.", created_at: minutesAgo(3) },
+      { id: "s4", author_name: "서연", color: "lilac", content: "사진도 한 장 붙일 수 있어요. 올리기 전에 크기를 줄여서 보냅니다.", created_at: minutesAgo(10) },
+      { id: "s5", author_name: "하준", color: "peach", content: "보드 주인으로 로그인하면 카드마다 지우기 버튼이 보입니다.", created_at: minutesAgo(60) },
+    ];
+
+    // ---------- 세로 줄 배치 ----------
+
+    function columnCount() {
+      const width = grid.clientWidth;
+      return width < 520 ? 2 : width < 800 ? 3 : width < 1100 ? 4 : 5;
+    }
+
+    function shortestColumn() {
+      return columns.reduce((a, b) => (b.offsetHeight < a.offsetHeight ? b : a));
+    }
+
+    // 줄을 새로 만들고, 최신 카드부터 가장 짧은 줄에 차례로 담는다
+    function layout() {
+      columns = Array.from({ length: columnCount() }, () => el("div", "grid-col"));
+      grid.replaceChildren(...columns);
+      cardNodes.forEach(node => shortestColumn().append(node));
+    }
+
+    new ResizeObserver(() => { if (columnCount() !== columns.length) layout(); }).observe(grid);
+
+    function showSkeleton() {
+      layout();
+      const heights = [150, 210, 120, 180, 160];
+      columns.forEach((col, i) => [0, 1].forEach(j => {
+        const block = el("div", "skeleton");
+        block.style.height = heights[(i + j * 2) % heights.length] + "px";
+        col.append(block);
+      }));
+    }
+
+    // ---------- 카드 그리기 ----------
+
+    function imageUrl(path) {
+      return db.storage.from("card-images").getPublicUrl(path).data.publicUrl;
+    }
+
+    function cardNode(card) {
+      const color = CARD_COLORS[card.color] ? card.color : "paper";
+      const node = el("article", "card c-" + color);
+
+      const head = el("div", "card-head");
+      const who = el("span", "card-who");
+      who.append(el("b", null, card.author_name), el("span", null, timeAgo(card.created_at)));
+      head.append(el("span", "avatar", [...card.author_name.trim()][0] || "?"), who);
+      node.append(head);
+
+      if (card.image_path && db) {
+        const img = el("img", "card-img");
+        img.src = imageUrl(card.image_path);
+        img.alt = card.author_name + "님이 올린 사진";
+        img.loading = "lazy";
+        node.append(img);
+      }
+      node.append(el("p", "card-text", card.content));
+      return node;
+    }
+
+    function addCard(card, atTop = true) {
+      // 내가 붙인 카드는 실시간 알림으로 한 번 더 오므로, 이미 있으면 건너뛴다
+      if (document.getElementById("card-" + card.id)) return;
+
+      const node = cardNode(card);
+      node.id = "card-" + card.id;
+      node.tabIndex = 0;
+      node.classList.add("is-new");
+      node.addEventListener("animationend", () => node.classList.remove("is-new"), { once: true });
+      node.addEventListener("click", () => openCard(card));
+      node.addEventListener("keydown", e => { if (e.key === "Enter") openCard(card); });
+
+      if (isOwner) {
+        const del = el("button", "card-del");
+        del.innerHTML = ICON.trash;
+        del.setAttribute("aria-label", "카드 지우기");
+        del.addEventListener("click", e => { e.stopPropagation(); deleteCard(card); });
+        node.querySelector(".card-head").append(del);
+      }
+
+      if (atTop) {
+        cardNodes.unshift(node);
+        shortestColumn().prepend(node);
+      } else {
+        node.style.animationDelay = Math.min(cardNodes.length, 12) * 45 + "ms";
+        cardNodes.push(node);
+        shortestColumn().append(node);
+      }
+      updateCount();
+    }
+
+    function removeCard(id) {
+      const node = document.getElementById("card-" + id);
+      if (!node) return;
+      cardNodes.splice(cardNodes.indexOf(node), 1);
+      node.remove();
+      updateCount();
+    }
+
+    function updateCount() {
+      document.getElementById("count").textContent = cardNodes.length;
+      document.getElementById("empty").hidden = cardNodes.length > 0;
+    }
+
+    function openCard(card) {
+      const node = cardNode(card);
+      const close = el("button", "icon-btn");
+      close.innerHTML = ICON.close;
+      close.setAttribute("aria-label", "닫기");
+      close.addEventListener("click", () => viewer.close());
+      node.querySelector(".card-head").append(close);
+      node.tabIndex = -1;
+      node.autofocus = true; // 열릴 때 닫기 버튼 대신 카드에 초점을 둔다
+      viewer.replaceChildren(node);
+      viewer.showModal();
+    }
+
+    async function deleteCard(card) {
+      if (!confirm("이 카드를 지울까요?")) return;
+      const { data, error } = await db.from("cards").delete().eq("id", card.id).select("id");
+      if (error) return toast("지우지 못했습니다: " + error.message);
+      if (data.length === 0) return toast("보드 주인만 지울 수 있습니다");
+      if (card.image_path) await db.storage.from("card-images").remove([card.image_path]);
+      removeCard(card.id);
+      toast("카드를 지웠습니다");
+    }
+
+    // ---------- 사진 줄이기: 긴 변 1280px, JPEG 품질 0.8 ----------
+
+    async function resizeImage(file, maxSide = 1280) {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; // 투명한 PNG가 검게 나오지 않도록 흰 바탕
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      return new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
+    }
+
+    function newId() {
+      return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+
+    // ---------- 카드 붙이기 ----------
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!db) return toast("Supabase를 연결해야 카드를 붙일 수 있습니다");
+      const fields = new FormData(form);
+      const name = fields.get("name").trim();
+      const content = fields.get("content").trim();
+      if (!name || !content) return toast("이름과 내용을 적어 주세요");
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "붙이는 중…";
+      try {
+        let image_path = null;
+        if (photo.files[0]) {
+          const blob = await resizeImage(photo.files[0]);
+          image_path = boardId + "/" + newId() + ".jpg";
+          const { error } = await db.storage.from("card-images").upload(image_path, blob, { contentType: "image/jpeg" });
+          if (error) throw error;
+        }
+        const { data, error } = await db.from("cards")
+          .insert({ board_id: boardId, author_name: name, content, color: fields.get("color"), image_path })
+          .select().single();
+        if (error) throw error;
+
+        addCard(data);
+        try { localStorage.setItem("moa-name", name); } catch {}
+        resetForm();
+        formDialog.close();
+        toast("카드를 붙였습니다");
+      } catch (err) {
+        toast("붙이지 못했습니다: " + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "붙이기";
+      }
+    });
+
+    function resetForm() {
+      form.reset();
+      try { form.elements.name.value = localStorage.getItem("moa-name") || ""; } catch {}
+      document.getElementById("photo-preview").hidden = true;
+      document.getElementById("photo-icon").hidden = false;
+      document.getElementById("photo-label").textContent = "사진 고르기";
+      document.getElementById("counter").textContent = "0 / 1000";
+    }
+
+    photo.addEventListener("change", () => {
+      const file = photo.files[0];
+      const preview = document.getElementById("photo-preview");
+      preview.hidden = !file;
+      document.getElementById("photo-icon").hidden = Boolean(file);
+      if (file) preview.src = URL.createObjectURL(file);
+      document.getElementById("photo-label").textContent = file ? file.name : "사진 고르기";
+    });
+
+    form.elements.content.addEventListener("input", e => {
+      document.getElementById("counter").textContent = e.target.value.length + " / 1000";
+    });
+
+    // 색 고르기 버튼을 CARD_COLORS로 만든다
+    Object.entries(CARD_COLORS).forEach(([key, label], i) => {
+      const input = el("input");
+      Object.assign(input, { type: "radio", name: "color", value: key, id: "color-" + key, defaultChecked: i === 0, checked: i === 0 });
+      input.setAttribute("aria-label", label);
+      const swatch = el("label", "c-" + key);
+      swatch.htmlFor = input.id;
+      swatch.title = label;
+      document.getElementById("swatches").append(input, swatch);
+    });
+
+    // ---------- 대화상자 열고 닫기 ----------
+
+    document.getElementById("open-form").addEventListener("click", () => {
+      formDialog.showModal();
+      form.elements[form.elements.name.value ? "content" : "name"].focus();
+    });
+    document.querySelector("[data-close]").addEventListener("click", () => formDialog.close());
+    // 바깥 어두운 곳을 누르면 닫힌다
+    [formDialog, viewer].forEach(d => d.addEventListener("click", e => { if (e.target === d) d.close(); }));
+    document.getElementById("share").addEventListener("click", () => copyText(location.href));
+
+    // ---------- 시작 ----------
+
+    function showMissing(detail) {
+      document.getElementById("board-title").textContent = "보드를 찾을 수 없습니다";
+      document.getElementById("board-desc").textContent = detail ? "불러오는 중 오류: " + detail : "링크가 맞는지 다시 확인해 주세요.";
+      document.getElementById("live-text").textContent = "연결 안 됨";
+      document.getElementById("open-form").hidden = true;
+    }
+
+    async function init() {
+      resetForm();
+      layout();
+      if (!db) {
+        document.getElementById("board-title").textContent = "미리보기 보드";
+        document.getElementById("board-desc").textContent = "지금 보이는 카드는 견본입니다. Supabase를 연결하면 진짜 카드가 붙습니다.";
+        document.getElementById("live-text").textContent = "미리보기";
+        submitBtn.disabled = true;
+        SAMPLE_CARDS.forEach(c => addCard(c, false));
+        return;
+      }
+      if (!/^[0-9a-f-]{36}$/.test(boardId)) return showMissing();
+      showSkeleton();
+
+      const { data: board, error: boardError } = await db.from("boards").select("*").eq("id", boardId).maybeSingle();
+      if (!board) { layout(); return showMissing(boardError?.message); }
+      document.title = board.title + " — 모아보드";
+      document.getElementById("board-title").textContent = board.title;
+      document.getElementById("board-desc").textContent = board.description || "";
+
+      const user = await currentUser();
+      isOwner = user?.id === board.owner;
+      document.getElementById("owner-badge").hidden = !isOwner;
+
+      // ponytail: 최근 300장만 불러온다. 더 필요하면 "더 보기" 페이지 나누기를 붙인다
+      const { data: cards, error } = await db.from("cards").select("*")
+        .eq("board_id", boardId).order("created_at", { ascending: false }).limit(300);
+      if (error) toast("카드를 불러오지 못했습니다: " + error.message);
+      layout();
+      (cards || []).forEach(c => addCard(c, false));
+      updateCount();
+
+      // 실시간: 새 카드는 이 보드 것만 받는다.
+      // 지우기(DELETE) 알림은 filter를 쓸 수 없으므로 전부 받고, 화면에 있는 카드만 지운다.
+      db.channel("board-" + boardId)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "cards", filter: "board_id=eq." + boardId },
+          payload => addCard(payload.new))
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "cards" },
+          payload => removeCard(payload.old.id))
+        .subscribe(status => {
+          const live = status === "SUBSCRIBED";
+          document.getElementById("live-dot").classList.toggle("on", live);
+          document.getElementById("live-text").textContent = live ? "실시간 연결됨" : "다시 연결 중";
+        });
+    }
+
+    init();
+  </script>
+</body>
+</html>
